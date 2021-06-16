@@ -14,9 +14,9 @@ int time = 0;
 
 typedef struct
 {
-    int age;
-    int valid;
-    int modified;
+    int age;  // LRU (Least recently used)
+    int valid; // 0 : miss | 1 : hit
+    int modified; // 0 : not modified | 1: modified
     uint32_t tag;
 } cline;
 
@@ -56,10 +56,37 @@ int index_bit(int n){
 /*     int b: The blocksize of cache                           */
 /*                                                             */
 /***************************************************************/
-cache build_cache(int S, int E, int b)
+cache build_cache(int S, int E, int b) // S = 16, E = 8, b = 8
 {
 	/* Implement this function */
+    cache result_cache;
+
+    result_cache.s = index_bit(S);
+    result_cache.E = E;
+    result_cache.b = index_bit(b);
+
+    result_cache.sets = (cset*)malloc(sizeof(cset)*S);
+
+    for(int i = 0; i < S; i++) {
+
+        result_cache.sets[i].lines = (cline*)malloc(sizeof(cline)*E);
+
+        cline* cache_line;
+        cache_line = result_cache.sets[i].lines;
+
+        for(int j = 0; j < E; i++) {
+
+            cache_line[j].age = 0;
+            cache_line[j].valid = 0;
+            cache_line[j].modified = 0;
+            cache_line[j].tag = 0;
+
+        }
+
+    }
+
 	// return result_cache;
+     return result_cache; 
 }
 
 /***************************************************************/
@@ -80,6 +107,18 @@ cache build_cache(int S, int E, int b)
 void access_cache(cache *L, int op, uint32_t addr, int *hit, int *miss, int *wb)
 {
 	/* Implement this function */
+    
+    /* Your output must contain the following statistics:
+        - the number of total reads
+        - the number of total writes
+        - the number of write-backs
+        - the number of read hits
+        - the number of write hits
+        - the number of read misses
+        - the number of write misses
+    */
+
+
 }
 
 /***************************************************************/
@@ -253,7 +292,6 @@ int main(int argc, char *argv[])
 
     /* TODO: Define a cache based on the struct declaration */
     // simCache = build_cache();
-
     // Simulate
     fp = fopen(trace_name, "r"); // read trace file
     if(fp == NULL) {
