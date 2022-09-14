@@ -16,7 +16,7 @@ typedef struct
 {
     int age;  // LRU (Least recently used)
     int valid; // 0 : miss | 1 : hit
-    int modified; // 0 : not modified | 1: modified
+    int modified;
     uint32_t tag;
 } cline;
 
@@ -56,8 +56,8 @@ int index_bit(int n){
 /*     int b: The blocksize of cache                           */
 /*                                                             */
 /***************************************************************/
-cache build_cache(int S, int E, int b) // S = 16, E = 8, b = 8
-{
+cache build_cache(int S, int E, int b)
+{ // S = 16, E = 8, b = 8
 	/* Implement this function */
     cache result_cache;
 
@@ -69,12 +69,11 @@ cache build_cache(int S, int E, int b) // S = 16, E = 8, b = 8
 
     for(int i = 0; i < S; i++) {
 
-        result_cache.sets[i].lines = (cline*)malloc(sizeof(cline)*E);
-
         cline* cache_line;
+        result_cache.sets[i].lines = (cline*)malloc(sizeof(cline)*E);
         cache_line = result_cache.sets[i].lines;
 
-        for(int j = 0; j < E; i++) {
+        for(int j = 0; j < E; j++) {
 
             cache_line[j].age = 0;
             cache_line[j].valid = 0;
@@ -104,21 +103,147 @@ cache build_cache(int S, int E, int b) // S = 16, E = 8, b = 8
 /*     int *wb: The number of write-back                       */
 /*                                                             */
 /***************************************************************/
-void access_cache(cache *L, int op, uint32_t addr, int *hit, int *miss, int *wb)
+void access_cache(cache *L, int op, uint32_t addr, int *read, int *write, int *r_hit, int *w_hit, 
+                                int *r_miss, int *w_miss, int *wb)
 {
 	/* Implement this function */
     
     /* Your output must contain the following statistics:
         - the number of total reads
         - the number of total writes
-        - the number of write-backs
+        - the number of write backs
         - the number of read hits
         - the number of write hits
         - the number of read misses
         - the number of write misses
     */
 
+   // index = 4 bits
+   // offset = 3 bites
+   // tag = 25 bits
 
+    uint32_t access_index = (addr >> 3) & 0xF;
+    uint32_t access_tag = (addr >> 7);
+
+    for(int i = 0; i < 16; i++) {
+        for(int j = 0; j < 8; j++) {
+            if(L->sets[i].lines[j].valid == 1) {
+                L->sets[i].lines[j].age++;
+            }
+        }
+    }
+
+    switch (op) {
+        
+        case 0: { // write
+
+            (*write)++;
+
+            for(int i = 0; i < 8; i++) {
+
+                if(L->sets[access_index].lines[i].valid == 1) {
+
+                    if(L->sets[access_index].lines[i].tag == access_tag) {
+                        (*w_hit)++;
+                        L->sets[access_index].lines[i].age = time;
+                        L->sets[access_index].lines[i].modified = 1;
+                        return;
+                    }
+
+                } else {
+
+                    (*w_miss)++;
+                    L->sets[access_index].lines[i].valid = 1;
+                    L->sets[access_index].lines[i].tag = access_tag;
+                    L->sets[access_index].lines[i].modified = 1;
+                    return;
+
+                }
+
+            }
+
+            int LRU_count = 0;
+            int LRU_out = 0;
+
+            for(int i = 0; i < 8; i++) {
+
+                if(L->sets[access_index].lines[i].age > LRU_count) {
+                    LRU_count = L->sets[access_index].lines[i].age;
+                    LRU_out = i;
+                }
+
+            }
+
+            (*w_miss)++;
+            
+            L->sets[access_index].lines[LRU_out].tag = access_tag;
+            L->sets[access_index].lines[LRU_out].age = 0;
+
+            if(L->sets[access_index].lines[LRU_out].modified == 1) {
+                (*wb)++;
+            } else {
+                L->sets[access_index].lines[LRU_out].modified = 1;
+            }
+
+            break;
+
+        }
+
+        case 1: { // read 
+
+            (*read)++;
+
+            for(int i = 0; i < 8; i++) {
+
+                if(L->sets[access_index].lines[i].valid == 1) {
+
+                    if(L->sets[access_index].lines[i].tag == access_tag) {
+                        (*r_hit)++;
+                        L->sets[access_index].lines[i].age = 0;
+                        return;
+                    }
+
+                } else {
+
+                    (*r_miss)++;
+                    L->sets[access_index].lines[i].valid = 1;
+                    L->sets[access_index].lines[i].tag = access_tag;
+                    return;
+
+                }
+
+            }
+
+            int LRU_count = 0;
+            int LRU_out = 0;
+
+            for(int i = 0; i < 8; i++) {
+
+                if(L->sets[access_index].lines[i].age > LRU_count) {
+                    LRU_count = L->sets[access_index].lines[i].age;
+                    LRU_out = i;
+                }
+
+            }
+
+            (*r_miss)++;
+
+            L->sets[access_index].lines[LRU_out].valid = 1;
+            L->sets[access_index].lines[LRU_out].tag = access_tag;
+            L->sets[access_index].lines[LRU_out].age = 0;
+
+            if(L->sets[access_index].lines[LRU_out].modified == 1) {
+                (*wb)++;
+                L->sets[access_index].lines[LRU_out].modified = 0;
+            }
+
+            break;
+        }
+
+        default:
+            break;
+    }
+    
 }
 
 /***************************************************************/
@@ -259,6 +384,8 @@ int main(int argc, char *argv[])
 
     /* You can define any variables that you want */
 
+    int op_toInt = 0;
+
     trace_name = argv[argc-1];
     if (argc < 3) {
         printf("Usage: %s -c cap:assoc:block_size [-x] input_trace \n", argv[0]);
@@ -291,7 +418,7 @@ int main(int argc, char *argv[])
     set = capacity / way / blocksize;
 
     /* TODO: Define a cache based on the struct declaration */
-    // simCache = build_cache();
+    simCache = build_cache(set, way, blocksize);
     // Simulate
     fp = fopen(trace_name, "r"); // read trace file
     if(fp == NULL) {
@@ -312,7 +439,14 @@ int main(int argc, char *argv[])
         fprintf(stderr, "addr: %x\n", addr);
 #endif
         // ...
-        // access_cache()
+
+        if(strcmp(op, "W") == 0) {
+            op_toInt = 0;
+        } else if(strcmp(op, "R") == 0) {
+            op_toInt = 1;
+        }
+
+        access_cache(&simCache, op_toInt, addr, &read, &write, &readhit, &writehit, &readmiss, &writemiss, &writeback);
         // ...
     }
 
